@@ -1,9 +1,33 @@
-import socket
-from typing import Any, BinaryIO, Dict, Iterable, List, Optional, Tuple, Union
-from asyncio import Lock, Queue, open_connection, get_running_loop, current_task
-from greenstalk import *
-from greenstalk import _parse_response, _parse_chunk, _parse_simple_yaml, _parse_simple_yaml_list, _to_id
+from typing import (
+    Any,
+    List,
+    Union,
+    Iterable,
+    Optional,
+)
+from asyncio import open_connection
 
+from greenstalk import (
+    # utils
+    _to_id,
+    _parse_chunk,
+    _parse_response,
+    _parse_simple_yaml,
+    _parse_simple_yaml_list,
+
+    # classes
+    Job,
+    Body,
+    Stats,
+    Address,
+    JobOrID,
+
+    # constants
+    DEFAULT_TTR,
+    DEFAULT_TUBE,
+    DEFAULT_DELAY,
+    DEFAULT_PRIORITY
+)
 
 
 class Client:
@@ -17,11 +41,13 @@ class Client:
                   be ignored if it's not included.
     """
 
-    def __init__(self,
-                 address: Address,
-                 encoding: Optional[str] = 'utf-8',
-                 use: str = DEFAULT_TUBE,
-                 watch: Union[str, Iterable[str]] = DEFAULT_TUBE) -> None:
+    def __init__(
+        self,
+        address: Address,
+        encoding: Optional[str] = 'utf-8',
+        use: str = DEFAULT_TUBE,
+        watch: Union[str, Iterable[str]] = DEFAULT_TUBE
+    ) -> None:
 
         self.address = address
         self.encoding = encoding
@@ -36,7 +62,9 @@ class Client:
         await self.close()
 
     async def connect(self):
-        "connect to beanstalkd server, by default to standard port 11300"
+        """connect to beanstalkd server, by default 
+        to standard port 11300.
+        """
         host, port = self.address
         self._reader, self._writer = await open_connection(host, port)
 
@@ -55,13 +83,14 @@ class Client:
 
     async def close(self) -> None:
         """Closes the connection to beanstalkd. The client instance should not
-        be used after calling this method."""
+        be used after calling this method.
+        """
         self._writer.close()
         await self._writer.wait_closed()
 
     async def _send_cmd(self, cmd: bytes, expected: bytes) -> List[bytes]:
         self._writer.write(cmd + b'\r\n')
-        #self._reader.readuntil(separator=b'\r\n')
+        # self._reader.readuntil(separator=b'\r\n')
         line = await self._reader.readline()
         return _parse_response(line, expected)
 
@@ -95,11 +124,13 @@ class Client:
         chunk = await self._read_chunk(size)
         return _parse_simple_yaml_list(chunk)
 
-    async def put(self,
-            body: Body,
-            priority: int = DEFAULT_PRIORITY,
-            delay: int = DEFAULT_DELAY,
-            ttr: int = DEFAULT_TTR) -> int:
+    async def put(
+        self,
+        body: Body,
+        priority: int = DEFAULT_PRIORITY,
+        delay: int = DEFAULT_DELAY,
+        ttr: int = DEFAULT_TTR
+    ) -> int:
         """Inserts a job into the currently used tube and returns the job ID.
 
         :param body: The data representing the job.
@@ -113,7 +144,8 @@ class Client:
             if self.encoding is None:
                 raise TypeError("Unable to encode string with no encoding set")
             body = body.encode(self.encoding)
-        cmd = b'put %d %d %d %d\r\n%b' % (priority, delay, ttr, len(body), body)
+        cmd = b'put %d %d %d %d\r\n%b' % (
+            priority, delay, ttr, len(body), body)
         return await self._int_cmd(cmd, b'INSERTED')
 
     async def use(self, tube: str) -> None:
@@ -157,10 +189,12 @@ class Client:
         """
         await self._send_cmd(b'delete %d' % _to_id(job), b'DELETED')
 
-    async def release(self,
-                job: Job,
-                priority: int = DEFAULT_PRIORITY,
-                delay: int = DEFAULT_DELAY) -> None:
+    async def release(
+        self,
+        job: Job,
+        priority: int = DEFAULT_PRIORITY,
+        delay: int = DEFAULT_DELAY
+    ) -> None:
         """Releases a reserved job.
 
         :param job: The job to release.
@@ -279,4 +313,3 @@ class Client:
         :param delay: The number of seconds to pause the tube for.
         """
         await self._send_cmd(b'pause-tube %b %d' % (tube.encode('ascii'), delay), b'PAUSED')
-
